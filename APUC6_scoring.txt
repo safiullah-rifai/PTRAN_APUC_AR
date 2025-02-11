@@ -1,0 +1,206 @@
+#!/usr/local/bin/Rscript --slave --vanilla
+
+# Arguments:
+#  1: Sample Info
+#  2: Count Matrix
+#  3: Output Directory
+#  4: Output Prefix
+#
+#####################################################################################
+### AUTHOR
+### 
+### Amol Carl Shetty
+### Bioinformatics Software Engineer Manager
+### 
+### =head1 LICENSE AND COPYRIGHT
+### 
+### Copyright (c) 2021 Amol Carl Shetty (<amolcarlshetty@gmail.com>). All rights
+### reserved.
+### 
+### This program is not free software and should not be distributed.
+### 
+### This program is distributed in the hope that it will be useful, but WITHOUT
+### ANY WARRANTY; without even the implied warranty of MERCHANTIBILITY or FITNESS
+### FOR A PARTICULAR PURPOSE. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
+### BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+### CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+### GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+### HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+### LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
+### OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#####################################################################################
+
+cat("\n***** Loading required packages ******\n\n")
+
+suppressMessages( library("scales") )
+
+### Functions ###
+
+Compute_APUC_Score = function(oMAT, aGLST) {
+	oMAT.apuc = oMAT[as.character(aGLST),]
+	cat("\n"); print(dim(oMAT.apuc))
+	cat("\n"); print(head(oMAT.apuc[,c(1:6)]))
+	
+	cat("\n### APUC Signature ###\n")
+	aScore.APUC = colMeans(oMAT.apuc, na.rm=TRUE)
+	cat("\n"); print(length(aScore.APUC))
+	cat("\n"); print(head(aScore.APUC))
+	cat("\n"); print(summary(aScore.APUC))
+	
+	aScore.APUC = rescale(aScore.APUC, to=c(0,100))
+	cat("\n"); print(length(aScore.APUC))
+	cat("\n"); print(summary(aScore.APUC))
+	
+	return(aScore.APUC)
+}
+
+Compute_AR_Score = function(oMAT) {
+	sGID = "AR"
+	
+	cat("\n### AR Expr ###\n")
+	aExpr.AR = as.numeric(oMAT[sGID,])
+	names(aExpr.AR) = colnames(oMAT)
+	cat("\n"); print(length(aExpr.AR))
+	cat("\n"); print(head(aExpr.AR))
+	cat("\n"); print(summary(aExpr.AR))
+	
+	aExpr.AR = rescale(aExpr.AR, to=c(0,100))
+	cat("\n"); print(length(aExpr.AR))
+	cat("\n"); print(summary(aExpr.AR))
+	
+	return(aExpr.AR)
+}
+
+Group_by_Quantile = function(oDAT, aBRK, aLBL) {
+	aBreak = quantile(oDAT, probs = aBRK, na.rm=TRUE)
+	cat("\n"); print(aBreak)
+	
+	aGRP = rep("NA", length(oDAT))
+	
+	if(length(aBreak) == 4) {
+		aGRP[(oDAT >= aBreak[1] & oDAT <= aBreak[2])] = aLBL[1]
+		aGRP[(oDAT > aBreak[2] & oDAT < aBreak[3])] = aLBL[2]
+		aGRP[(oDAT >= aBreak[3] & oDAT <= aBreak[4])] = aLBL[3]
+	}
+	
+	if(length(aBreak) == 3) {
+		aGRP[(oDAT >= aBreak[1] & oDAT < aBreak[2])] = aLBL[1]
+		aGRP[(oDAT >= aBreak[2] & oDAT <= aBreak[3])] = aLBL[2]
+	}
+	
+	aGRP = factor(aGRP, levels = aLBL)
+	return(aGRP)
+}
+
+### Main ###
+
+# Read command line options
+cat("\n***** Reading Command-line arguments ******\n\n")
+aCmdLineOptions = commandArgs(TRUE)
+stopifnot(length(aCmdLineOptions) >= 4)
+
+# Sample Info File
+cat("\nReading Sample Info File .....\n")
+sINFO = aCmdLineOptions[1]
+
+# Count Matrix
+cat("\nReading Normalized Count Matrix .....\n")
+sNORM = aCmdLineOptions[2]
+
+# Output Directory
+cat("\nReading Output Directory .....\n")
+sOutDir = aCmdLineOptions[3]
+
+# Output Prefix
+cat("\nReading Output Prefix .....\n")
+sPrefix = aCmdLineOptions[4]
+
+cat("\n### APUC Signature Gene List ###\n")
+oGSet = data.frame(Gene.stable.ID = c("ENSG00000203857","ENSG00000203859","ENSG00000021461","ENSG00000140459","ENSG00000160882","ENSG00000148795"),
+				   Gene.name = c("HSD3B1","HSD3B2","CYP3A43","CYP11A1","CYP11B1","CYP17A1"))
+cat("\n"); print(dim(oGSet))
+cat("\n"); print(head(oGSet))
+
+cat(paste("\nSample Info File : ", sINFO, "\n", sep=""))
+sampleInfo = read.delim(sINFO, header=T, sep="\t", stringsAsFactor=F)
+cat("\n"); print(dim(sampleInfo))
+rownames(sampleInfo) = sampleInfo$sampleName
+cat("\n"); print(head(sampleInfo))
+
+sampleTable = sampleInfo
+cat("\n"); print(dim(sampleTable))
+cat("\n"); print(colnames(sampleTable))
+
+cat("\nNormalized Expression File:", sNORM, "\n")
+oNORM = read.delim(sNORM, header=T, sep="\t", stringsAsFactor=F)
+cat("\n"); print(dim(oNORM))
+colnames(oNORM)[1] = "Gene.ID"
+rownames(oNORM) = oNORM$Gene.ID
+oNORM = oNORM[,-1]
+oNORM = as.matrix(oNORM)
+cat("\n"); print(dim(oNORM))
+cat("\n"); print(head(oNORM[,c(1:6)]))
+
+bKeep = (colnames(oNORM) %in% sampleTable$sampleName)
+oNORM = oNORM[,bKeep]
+cat("\n"); print(dim(oNORM))
+cat("\n"); print(head(oNORM[,c(1:6)]))
+
+cat("\n### Normalized Expression (Scaled) ###\n")
+oNORM.scaled = scale(t(oNORM))
+oNORM.scaled = t(oNORM.scaled)
+cat("\n"); print(dim(oNORM.scaled))
+cat("\n"); print(head(oNORM.scaled[,c(1:6)]))
+
+bKeep = oGSet$Gene.name %in% rownames(oNORM.scaled)
+aSelect = oGSet$Gene.name[bKeep]
+cat("\n"); print(aSelect)
+
+cat("\n### Add APUC Signature to Sample Table ###\n")
+aSample.APUC = Compute_APUC_Score(oNORM.scaled, aSelect)
+sampleTable$APUC.Score = NA
+sampleTable[as.character(names(aSample.APUC)), "APUC.Score"] = unname(aSample.APUC)
+cat("\n"); print(dim(sampleTable))
+cat("\n"); print(head(sampleTable))
+cat("\n"); print(summary(sampleTable$APUC.Score))
+
+cat("\n### Add AR Expression to Sample Table ###\n")
+aSample.AR = Compute_AR_Score(oNORM.scaled)
+sampleTable$AR.Expr = NA
+sampleTable[as.character(names(aSample.AR)), "AR.Expr"] = unname(aSample.AR)
+cat("\n"); print(dim(sampleTable))
+cat("\n"); print(head(sampleTable))
+cat("\n"); print(summary(sampleTable$AR.Expr))
+
+aProb = c(0, 0.75, 1)
+aLabel.apuc = c("APUCLow","APUCHigh")
+
+sampleTable$APUC.Grp = Group_by_Quantile(sampleTable$APUC.Score, aProb, aLabel.apuc)
+sampleTable$APUC.Grp = factor(sampleTable$APUC.Grp, levels = aLabel.apuc)
+cat("\n"); print(table(sampleTable$APUC.Grp))
+
+aProb = c(0, 0.75, 1)
+aLabel.ar = c("ARLow","ARHigh")
+
+sampleTable$AR.Grp = Group_by_Quantile(sampleTable$AR.Expr, aProb, aLabel.ar)
+sampleTable$AR.Grp = factor(sampleTable$AR.Grp, levels = aLabel.ar)
+cat("\n"); print(table(sampleTable$AR.Grp))
+
+cat("\n"); print(table(sampleTable$APUC.Grp, sampleTable$AR.Grp))
+
+sampleTable$Group = paste(sampleTable$APUC.Grp, sampleTable$AR.Grp, sep = "_")
+aEXPR.lvl = c("APUCLow_ARLow","APUCLow_ARHigh","APUCHigh_ARLow","APUCHigh_ARHigh")
+sampleTable$Group = factor(sampleTable$Group, levels = aEXPR.lvl)
+cat("\n"); print(table(sampleTable$Group))
+
+cat("\n"); print(dim(sampleTable))
+cat("\n"); print(head(sampleTable[,c("sampleName","APUC.Score","AR.Expr","APUC.Grp","AR.Grp","Group")]))
+
+sOutFile = paste(sOutDir, "/", sPrefix, ".sample_table.txt",sep="")
+cat(paste("\n### Writing Sample Table to ", sOutFile, "\n", sep=""))
+write.table(sampleTable, file=sOutFile, append=F, quote=F, sep="\t", eol="\n", na="NA", row.names=F, col.names=T)
+
+cat("\n***** Session Info ******\n\n")
+sessionInfo()
+
+cat("\n### Analysis Complete ###\n")
